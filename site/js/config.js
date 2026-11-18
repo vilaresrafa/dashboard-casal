@@ -4,7 +4,7 @@
  * Rodando em localhost, o site usa o servidor local (npm run dev).
  */
 window.CONFIG = {
-  API_URL: 'COLE_AQUI_A_URL_DO_APPS_SCRIPT',
+  API_URL: 'https://script.google.com/macros/s/AKfycbxh1MluK9yKGNQhRI_C3X-IVCe9yu7cSKFDdCqAh19YmMddZvkKQFqTL9fvuq7A5bOK/exec',
   INTERVALO_ATUALIZACAO_MS: 60000
 };
 
