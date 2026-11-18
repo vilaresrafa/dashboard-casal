@@ -1,0 +1,10 @@
+# Dados locais (ids da planilha, do script e da implantação): não vão para o GitHub
+config-local.json
+CLAUDE.local.md
+apps-script/.clasp.json
+
+# Sistema / editores
+node_modules/
+.DS_Store
+Thumbs.db
+*.log

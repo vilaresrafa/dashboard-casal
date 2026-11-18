@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dashboard-local",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["ferramentas/servidor-local.js"],
+      "port": 8787
+    },
+    {
+      "name": "dashboard-vazio",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["ferramentas/servidor-local.js", "--vazio", "--porta=8788"],
+      "port": 8788
+    }
+  ]
+}

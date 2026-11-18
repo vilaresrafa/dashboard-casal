@@ -1,0 +1,13 @@
+{
+  "name": "nos-dois-dashboard-casal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dashboard do casal: tarefas, metas, dieta, foto e recado do dia. Planilha Google + Apps Script + GitHub Pages.",
+  "scripts": {
+    "test": "node --test \"testes/*.test.js\"",
+    "dev": "node ferramentas/servidor-local.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
