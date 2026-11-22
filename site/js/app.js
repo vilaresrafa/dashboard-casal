@@ -618,24 +618,49 @@
 
   /* ---------- Dieta ---------- */
 
+  /* Dia que o cartão da dieta está mostrando (hoje, se nada foi escolhido ou o dia saiu da janela). */
+  function diaDieta(e) {
+    var d = S.diaDieta;
+    return d && d < e.hoje && e.dietaDias && e.dietaDias[d] ? d : e.hoje;
+  }
+
+  function rotuloDia(d, e) {
+    var n = diasEntre(d, e.hoje);
+    if (n === 0) return 'Hoje';
+    if (n === 1) return 'Ontem';
+    return dataBr(d, { weekday: 'short', day: '2-digit', month: '2-digit' }).replace('.', '');
+  }
+
   function cartaoDieta(e) {
-    var algo = osDois().some(function (p) { return e.dieta[p].itens.length || e.pessoas[p].metaKcal; });
+    var dia = diaDieta(e);
+    var ehHoje = dia === e.hoje;
+    var dd = ehHoje ? e.dieta : e.dietaDias[dia];
+    var dias = e.dietaDias ? Object.keys(e.dietaDias).sort() : [e.hoje];
+    var i = dias.indexOf(dia);
+    function ir(novo) { S.diaDieta = novo; render(); }
+    var nav = h('span', { class: 'nav-dia' },
+      h('button', { class: 'botao-icone', type: 'button', 'aria-label': 'Dia anterior', disabled: i <= 0, onclick: function () { ir(dias[i - 1]); } }, icone('seta_esq')),
+      h('span', { class: 'nav-dia-rotulo', 'aria-live': 'polite' }, rotuloDia(dia, e)),
+      h('button', { class: 'botao-icone', type: 'button', 'aria-label': 'Próximo dia', disabled: ehHoje, onclick: function () { ir(dias[i + 1]); } }, icone('seta_dir')));
+    var algo = osDois().some(function (p) { return dd[p].itens.length || e.pessoas[p].metaKcal; });
     return h('section', { class: 'cartao' },
-      tituloCartao('prato', 'Dieta de hoje'),
-      h('div', { class: 'duas-colunas' }, osDois().map(function (p) { return blocoDieta(p, e); })),
-      detalheRefeicoes(e),
-      algo ? null : h('p', { class: 'dica', style: 'margin-top:14px' }, icone('recado'),
+      tituloCartao('prato', 'Dieta', nav),
+      h('div', { class: 'duas-colunas' }, osDois().map(function (p) { return blocoDieta(p, e, dd[p], ehHoje); })),
+      detalheRefeicoes(dd),
+      algo || !ehHoje ? null : h('p', { class: 'dica', style: 'margin-top:14px' }, icone('recado'),
         'A dieta é registrada pelo Claude: é só contar a ele o que vocês comeram e ele anota na planilha.'));
   }
 
-  function blocoDieta(p, e) {
-    var d = e.dieta[p], pes = e.pessoas[p];
+  function blocoDieta(p, e, d, ehHoje) {
+    var pes = e.pessoas[p];
     var kcal = Math.round(d.totais.kcal);
     var meta = pes.metaKcal;
     var resto = null;
     if (meta) {
       var dif = Math.round(meta - kcal);
-      resto = dif >= 0 ? 'faltam ' + fmt(dif) + ' kcal' : fmt(-dif) + ' kcal acima';
+      if (ehHoje) resto = dif >= 0 ? 'faltam ' + fmt(dif) + ' kcal' : fmt(-dif) + ' kcal acima';
+      else if (!d.itens.length) resto = 'nada registrado';
+      else resto = dif >= 0 ? fmt(dif) + ' kcal abaixo da meta' : fmt(-dif) + ' kcal acima da meta';
     }
     var macros = [['Proteína', d.totais.proteina, pes.metaProteina], ['Carbo', d.totais.carbo, pes.metaCarbo], ['Gordura', d.totais.gordura, pes.metaGordura]];
     return h('div', { class: 'dieta-pessoa p-' + p },
@@ -651,17 +676,17 @@
           h('div', { class: 'macro-cab' }, h('span', {}, m[0]), h('b', {}, fmt(m[1]) + (m[2] ? ' / ' + fmt(m[2]) : '') + ' g')),
           h('div', { class: 'barra' }, h('span', { style: 'width:' + pct + '%' })));
       })),
-      e.peso[p] ? h('p', { class: 'peso-linha' }, icone('balanca'), fmt(e.peso[p].kg, 1) + ' kg',
+      ehHoje && e.peso[p] ? h('p', { class: 'peso-linha' }, icone('balanca'), fmt(e.peso[p].kg, 1) + ' kg',
         h('span', { style: 'color:var(--texto-3)' }, '· ' + quandoFoi(e.peso[p].data))) : null);
   }
 
-  function detalheRefeicoes(e) {
-    var total = osDois().reduce(function (s, p) { return s + e.dieta[p].itens.length; }, 0);
+  function detalheRefeicoes(dd) {
+    var total = osDois().reduce(function (s, p) { return s + dd[p].itens.length; }, 0);
     if (!total) return null;
     return h('details', { class: 'refeicoes', open: !!S.refeicoesAbertas, ontoggle: function (ev) { S.refeicoesAbertas = ev.target.open; } },
       h('summary', {}, 'Ver refeições (' + total + ')', icone('seta_baixo')),
       osDois().map(function (p) {
-        var itens = e.dieta[p].itens;
+        var itens = dd[p].itens;
         if (!itens.length) return null;
         return h('div', { class: 'p-' + p, style: 'margin-top:10px' }, cabPessoa(p),
           itens.map(function (it) {

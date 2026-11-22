@@ -16,7 +16,7 @@ Abas:
 Regras:
 1. Antes de escrever numa aba pela primeira vez na conversa, leia a linha 1 dela para confirmar a ordem das colunas.
 2. Grave com append_values no range `Dieta!A1` (ou `Peso!A1`). Uma linha por alimento ou prato.
-3. Data como texto aaaa-mm-dd no fuso de São Paulo. Se eu não disser o dia, é hoje.
+3. Data como texto aaaa-mm-dd no fuso de São Paulo. Se eu não disser o dia, é hoje. O dia só vira às 3h da manhã: entre 0h e 2h59 ainda é o dia anterior (ex.: 1h de 20/11 grava 2026-11-19).
 4. refeicao: "Café da manhã", "Almoço", "Lanche", "Jantar" ou "Ceia".
 5. Estime kcal e macros em gramas com base na tabela TACO ou em rótulos. Números como números (72.5), arredondados.
 6. Se a porção estiver muito vaga, pergunte antes de gravar.

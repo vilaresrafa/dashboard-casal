@@ -30,7 +30,7 @@ Claude (conector Google Sheets) ------------------------------------------------
 Use o conector do Google Sheets. O id da planilha está em `CLAUDE.local.md`. Antes de escrever numa aba pela primeira vez na conversa, leia a linha 1 (`Aba!A1:Z1`) para confirmar a ordem das colunas. Grave com `append_values` usando o range `Aba!A1`.
 
 Regras gerais:
-- Datas como texto `aaaa-mm-dd`, no fuso de São Paulo. "Hoje" é a data de São Paulo, não UTC.
+- Datas como texto `aaaa-mm-dd`, no fuso de São Paulo. "Hoje" é a data de São Paulo, não UTC, e o dia só vira às 3h da manhã: entre 0h e 2h59 ainda vale o dia anterior (ex.: 1h de 20/11 grava `2026-11-19`). É a mesma regra do site (`HORA_VIRADA` em `Code.js`).
 - `pessoa` é sempre `ele` ou `ela` (minúsculo).
 - Números como números (ex.: `72.5`, não `"72,5"`). Ao ler, a planilha devolve decimais com vírgula; isso é normal.
 - Um pedido explícito ("registra que comi X") já é a aprovação: registre e mostre um resumo. Se a estimativa for muito incerta (porção desconhecida), pergunte antes.

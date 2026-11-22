@@ -11,7 +11,7 @@
  * Funções que terminam com "_" são privadas: o Apps Script não deixa chamá-las de fora.
  */
 
-var VERSAO = '1.0.0';
+var VERSAO = '1.1.0';
 var FUSO = 'America/Sao_Paulo';
 var PESSOAS = ['ele', 'ela'];
 var MAX_ERROS_PIN = 5;
@@ -19,6 +19,8 @@ var BLOQUEIO_SEG = 15 * 60;
 var LIMITE_FOTO_CHARS = 6 * 1024 * 1024; // dataURL em base64 (~4,5 MB de imagem)
 var LIMITE_MINIATURA_CHARS = 49000;     // uma célula aceita até 50.000 caracteres
 var DIAS_PENDENTES = 7;                 // tarefas não feitas aparecem como pendentes por 7 dias
+var HORA_VIRADA = 3;                    // o dia muda às 3h da manhã (horário de São Paulo), não à meia-noite
+var DIAS_DIETA = 14;                    // dias da dieta (com hoje) que o site pode navegar
 
 // Abas da planilha e suas colunas (a ordem pode mudar na planilha; o código lê pelo nome da coluna).
 var ABAS = {
@@ -279,25 +281,10 @@ function montarEstado_(eu, opcoes) {
     metasLongo[m.pessoa].push(publicaMetaLongo_(m));
   });
 
-  // Dieta de hoje + metas de calorias
+  // Dieta de hoje e dos dias anteriores (para navegar no site) + metas de calorias
   var pessoas = lerPessoas_();
-  var dieta = porPessoa_(null);
-  PESSOAS.forEach(function (p) {
-    dieta[p] = { itens: [], totais: { kcal: 0, proteina: 0, carbo: 0, gordura: 0 } };
-  });
-  ler_('Dieta').forEach(function (r) {
-    var p = pessoa_(r.pessoa);
-    if (!p || dataStr_(r.data) !== hoje) return;
-    var item = {
-      refeicao: texto_(r.refeicao), alimento: texto_(r.alimento), quantidade: texto_(r.quantidade),
-      kcal: num_(r.kcal), proteina: num_(r.proteina_g), carbo: num_(r.carbo_g), gordura: num_(r.gordura_g), obs: texto_(r.obs)
-    };
-    dieta[p].itens.push(item);
-    dieta[p].totais.kcal += item.kcal;
-    dieta[p].totais.proteina += item.proteina;
-    dieta[p].totais.carbo += item.carbo;
-    dieta[p].totais.gordura += item.gordura;
-  });
+  var dietaDias = dietaPorDia_(somarDias_(hoje, -(DIAS_DIETA - 1)), hoje);
+  var dieta = dietaDias[hoje];
 
   // Peso mais recente
   var peso = porPessoa_(null);
@@ -332,6 +319,7 @@ function montarEstado_(eu, opcoes) {
     metasSemana: metasSemana,
     metasLongo: metasLongo,
     dieta: dieta,
+    dietaDias: dietaDias,
     peso: peso,
     momentos: momentos
   };
@@ -340,6 +328,31 @@ function montarEstado_(eu, opcoes) {
 /* =========================================================================
  * Tarefas
  * ========================================================================= */
+
+/** Refeições e totais de cada pessoa, para cada dia de "inicio" a "fim" (dias sem registro vêm vazios). */
+function dietaPorDia_(inicio, fim) {
+  var dias = {};
+  for (var d = inicio; d <= fim; d = somarDias_(d, 1)) {
+    dias[d] = porPessoa_(null);
+    PESSOAS.forEach(function (p) {
+      dias[d][p] = { itens: [], totais: { kcal: 0, proteina: 0, carbo: 0, gordura: 0 } };
+    });
+  }
+  ler_('Dieta').forEach(function (r) {
+    var p = pessoa_(r.pessoa), dia = dias[dataStr_(r.data)];
+    if (!p || !dia) return;
+    var item = {
+      refeicao: texto_(r.refeicao), alimento: texto_(r.alimento), quantidade: texto_(r.quantidade),
+      kcal: num_(r.kcal), proteina: num_(r.proteina_g), carbo: num_(r.carbo_g), gordura: num_(r.gordura_g), obs: texto_(r.obs)
+    };
+    dia[p].itens.push(item);
+    dia[p].totais.kcal += item.kcal;
+    dia[p].totais.proteina += item.proteina;
+    dia[p].totais.carbo += item.carbo;
+    dia[p].totais.gordura += item.gordura;
+  });
+  return dias;
+}
 
 function acaoAddTarefa_(c, eu) {
   var texto = textoLimpo_(c.texto, 200, false);
@@ -1141,8 +1154,9 @@ function agora_() {
   return new Date();
 }
 
+/** O dia só vira às HORA_VIRADA da manhã: 1h da madrugada ainda conta como o dia anterior. */
 function hoje_() {
-  return Utilities.formatDate(agora_(), FUSO, 'yyyy-MM-dd');
+  return Utilities.formatDate(new Date(agora_().getTime() - HORA_VIRADA * 3600000), FUSO, 'yyyy-MM-dd');
 }
 
 function agoraIso_() {

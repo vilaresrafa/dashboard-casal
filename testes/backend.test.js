@@ -185,7 +185,7 @@ test('a lista de amanhã vira a lista de hoje no dia seguinte', () => {
   const amb = preparado('2026-11-18T22:30:00-03:00');
   amb.ok('ele', 'addTarefa', { data: '2026-11-19', texto: 'Estudar PO' });
   assert.equal(amb.ok('ele', 'estado').estado.tarefas.amanha.ele.length, 1);
-  amb.definirAgora('2026-11-19T00:10:00-03:00');
+  amb.definirAgora('2026-11-19T03:10:00-03:00');
   const e = amb.ok('ele', 'estado').estado;
   assert.equal(e.hoje, '2026-11-19');
   assert.deepEqual(e.tarefas.hoje.ele.map((t) => t.texto), ['Estudar PO']);
@@ -195,6 +195,36 @@ test('a lista de amanhã vira a lista de hoje no dia seguinte', () => {
 test('virada do dia usa o fuso de São Paulo (23h de SP já é amanhã em UTC)', () => {
   const amb = preparado('2026-11-18T23:30:00-03:00');
   assert.equal(amb.ok('ele', 'estado').estado.hoje, '2026-11-18');
+});
+
+test('o dia só vira às 3h da manhã: de madrugada ainda vale o dia anterior', () => {
+  const amb = preparado('2026-11-18T23:00:00-03:00');
+  amb.ok('ele', 'addTarefa', { data: '2026-11-18', texto: 'Revisar o capítulo' });
+  amb.ok('ele', 'addTarefa', { data: '2026-11-19', texto: 'Academia' });
+  amb.aba('Dieta').acrescentarCru({ data: '2026-11-18', pessoa: 'ele', refeicao: 'Ceia', alimento: 'Pão', kcal: 200 });
+
+  amb.definirAgora('2026-11-19T01:30:00-03:00');
+  let e = amb.ok('ele', 'estado').estado;
+  assert.equal(e.hoje, '2026-11-18');
+  assert.equal(e.amanha, '2026-11-19');
+  assert.deepEqual(e.tarefas.hoje.ele.map((t) => t.texto), ['Revisar o capítulo']);
+  assert.deepEqual(e.tarefas.amanha.ele.map((t) => t.texto), ['Academia']);
+  assert.equal(e.dieta.ele.totais.kcal, 200);
+  // o que for feito de madrugada conta para o dia anterior
+  amb.ok('ele', 'addTarefa', { data: e.hoje, texto: 'Lavar a louça' });
+  e = amb.ok('ele', 'salvarMomento', { recado: 'boa noite' }).estado;
+  assert.equal(e.momentos.ele.recado, 'boa noite');
+  assert.equal(amb.aba('Momentos').objetos()[0].data, '2026-11-18');
+  assert.equal(e.tarefas.hoje.ele.length, 2);
+
+  amb.definirAgora('2026-11-19T02:59:00-03:00');
+  assert.equal(amb.ok('ele', 'estado').estado.hoje, '2026-11-18');
+  amb.definirAgora('2026-11-19T03:00:00-03:00');
+  e = amb.ok('ele', 'estado').estado;
+  assert.equal(e.hoje, '2026-11-19');
+  assert.deepEqual(e.tarefas.hoje.ele.map((t) => t.texto), ['Academia']);
+  assert.equal(e.dieta.ele.totais.kcal, 0);
+  assert.equal(e.momentos.ele, null);
 });
 
 test('datas fora do intervalo são recusadas', () => {
@@ -293,7 +323,9 @@ test('metas da semana: +1, desfazer, contagem zera na segunda e só a dona marca
 
   amb.definirAgora('2026-11-22T23:59:00-03:00'); // domingo: ainda conta
   assert.equal(amb.ok('ele', 'estado').estado.metasSemana.ele[0].feitas, 1);
-  amb.definirAgora('2026-11-23T00:01:00-03:00'); // segunda: zera
+  amb.definirAgora('2026-11-23T02:30:00-03:00'); // segunda de madrugada: ainda é domingo
+  assert.equal(amb.ok('ele', 'estado').estado.metasSemana.ele[0].feitas, 1);
+  amb.definirAgora('2026-11-23T03:01:00-03:00'); // segunda depois das 3h: zera
   e = amb.ok('ele', 'estado').estado;
   assert.equal(e.metasSemana.ele[0].feitas, 0);
   amb.falha('ele', 'marcarMetaSemana', { id: meta.id, delta: -1 }); // nada a desfazer nesta semana
@@ -355,6 +387,16 @@ test('dieta: soma as refeições de hoje com números em formatos variados e lê
   assert.equal(e.dieta.ele.totais.gordura, 27.5);
   assert.equal(e.dieta.ela.totais.kcal, 120);
   assert.equal(e.dieta.ela.itens[0].quantidade, '1/2 pote');
+
+  // últimos 14 dias para navegar no site (hoje incluído; dias sem registro vêm vazios)
+  const dias = Object.keys(e.dietaDias);
+  assert.equal(dias.length, 14);
+  assert.equal(dias[0], '2026-11-05');
+  assert.equal(dias[13], '2026-11-18');
+  assert.equal(e.dietaDias['2026-11-17'].ele.totais.kcal, 999);
+  assert.equal(e.dietaDias['2026-11-17'].ele.itens[0].alimento, 'Ontem');
+  assert.equal(e.dietaDias['2026-11-16'].ela.itens.length, 0);
+  assert.equal(e.dietaDias['2026-11-18'].ele.totais.kcal, 1000.5);
 
   const prog = amb.ok('ele', 'progresso').progresso;
   assert.equal(prog.kcal.length, 14);

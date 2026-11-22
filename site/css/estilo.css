@@ -145,6 +145,10 @@ main {
 .cartao-titulo .ic { color: var(--texto-2); }
 .cartao-titulo .extra { margin-left: auto; font-size: 13px; font-weight: 700; color: var(--texto-3); }
 .subtitulo { color: var(--texto-2); font-size: 14px; margin: -8px 0 14px; }
+.nav-dia { display: flex; align-items: center; gap: 2px; margin: -8px -8px; }
+.nav-dia .botao-icone { width: 36px; height: 36px; }
+.nav-dia .botao-icone:disabled { opacity: 0.3; cursor: default; background: transparent; }
+.nav-dia-rotulo { min-width: 76px; text-align: center; font-size: 14px; font-weight: 800; color: var(--texto-2); text-transform: capitalize; }
 
 .duas-colunas { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
 .pessoas { display: grid; gap: 18px; }

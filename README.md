@@ -2,9 +2,9 @@
 
 Um cantinho compartilhado para um casal acompanhar o dia a dia pelo celular:
 
-- **Tarefas**: cada um monta a própria lista de amanhã à noite; no dia seguinte ela vira a lista de hoje. As tarefas que ficaram para trás aparecem como pendentes, com opção de trazer para hoje.
+- **Tarefas**: cada um monta a própria lista de amanhã à noite; no dia seguinte ela vira a lista de hoje (o dia só vira às 3h da manhã, para quem dorme tarde). As tarefas que ficaram para trás aparecem como pendentes, com opção de trazer para hoje.
 - **Metas**: da semana (ex.: academia 4x, contagem zera toda segunda) e de longo prazo (barra de progresso, inclusive metas que diminuem, como peso).
-- **Dieta**: calorias e macros do dia de cada um contra a meta, refeições registradas e evolução do peso. Os registros são feitos conversando com o Claude, que escreve direto na planilha.
+- **Dieta**: calorias e macros do dia de cada um contra a meta, refeições registradas (dá para voltar até 14 dias) e evolução do peso. Os registros são feitos conversando com o Claude, que escreve direto na planilha.
 - **Momento do dia**: cada um posta uma foto e um recado para o outro; tudo fica guardado em Memórias.
 - **Progresso**: sequências (dias seguidos com tudo feito, dias seguidos trocando recado), gráficos de tarefas, metas, calorias e peso.
 
@@ -42,7 +42,7 @@ ferramentas/        servidor local, dados de exemplo, geração de ícones e scr
 Requisitos: Node 18 ou mais novo.
 
 ```bash
-npm test          # 29 testes do backend
+npm test          # 30 testes do backend
 npm run dev       # http://localhost:8787  (PINs de teste: ele 111111, ela 222222)
 ```
 
