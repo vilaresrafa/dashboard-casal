@@ -128,6 +128,13 @@ function semear(amb, opcoes = {}) {
     peso.acrescentarCru({ data: dia(-7 * w - 1), pessoa: 'ela', peso_kg: Math.round((63.5 - (9 - w) * 0.25 + (rnd() - 0.5) * 0.4) * 10) / 10 });
   }
 
+  // Anticoncepcional: quase todo dia dos últimos 40 (hoje ainda não), por volta das 21h
+  const remedio = aba('Anticoncepcional');
+  for (let n = -40; n <= -1; n++) {
+    if (n === -12 || n === -25) continue; // dois esquecimentos
+    remedio.acrescentarCru({ data: dia(n), hora: `21:${String(Math.floor(rnd() * 50) + 5).padStart(2, '0')}`, marcado_por: rnd() < 0.7 ? 'ela' : 'ele' });
+  }
+
   // Momentos dos últimos 10 dias (+ o dela hoje)
   const momentos = aba('Momentos');
   const minis = aba('Miniaturas');

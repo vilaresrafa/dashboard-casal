@@ -46,7 +46,7 @@ test('prepararPlanilha cria todas as abas com cabeçalhos e é idempotente', () 
   amb.ctx.prepararPlanilha_();
   amb.ctx.prepararPlanilha_();
   const nomes = amb.ss.getSheets().map((s) => s.getName()).sort();
-  assert.deepEqual(nomes, ['Dieta', 'MetasLongo', 'MetasSemana', 'MetasSemanaLog', 'Miniaturas', 'Momentos', 'Peso', 'Pessoas', 'Tarefas']);
+  assert.deepEqual(nomes, ['Anticoncepcional', 'Dieta', 'MetasLongo', 'MetasSemana', 'MetasSemanaLog', 'Miniaturas', 'Momentos', 'Peso', 'Pessoas', 'Tarefas']);
   const pessoas = amb.aba('Pessoas').objetos().map((o) => o.id);
   assert.deepEqual(pessoas, ['ele', 'ela']);
   assert.equal(amb.aba('Miniaturas').isSheetHidden(), true);
@@ -601,4 +601,53 @@ test('a aba cresce além de 1000 linhas sem quebrar', () => {
   const e = amb.ok('ele', 'marcarMetaSemana', { id: meta.id, delta: 1 }).estado;
   assert.equal(e.metasSemana.ele[0].feitas, 1);
   assert.ok(sh.getMaxRows() > 1000);
+});
+
+/* ---------------- Anticoncepcional ---------------- */
+
+test('anticoncepcional: os dois marcam, mudam a hora e desmarcam; um dia tem uma linha só', () => {
+  const amb = preparado();
+  let e = amb.ok('ela', 'estado').estado;
+  assert.deepEqual(e.remedio, {});
+
+  e = amb.ok('ela', 'marcarRemedio', { data: '2026-11-18', hora: '21:30' }).estado;
+  assert.deepEqual(e.remedio['2026-11-18'], { hora: '21:30', por: 'ela' });
+  // ele corrige a hora: atualiza a mesma linha
+  e = amb.ok('ele', 'marcarRemedio', { data: '2026-11-18', hora: '22h' }).estado;
+  assert.deepEqual(e.remedio['2026-11-18'], { hora: '22:00', por: 'ele' });
+  assert.equal(amb.aba('Anticoncepcional').objetos().length, 1);
+  // dia passado pode ser marcado
+  amb.ok('ela', 'marcarRemedio', { data: '2026-11-10', hora: '9:05' });
+  // o outro vê o mesmo calendário
+  e = amb.ok('ela', 'estado').estado;
+  assert.deepEqual(Object.keys(e.remedio).sort(), ['2026-11-10', '2026-11-18']);
+  assert.equal(e.remedio['2026-11-10'].hora, '09:05');
+
+  e = amb.ok('ela', 'marcarRemedio', { data: '2026-11-18', desmarcar: true }).estado;
+  assert.equal(e.remedio['2026-11-18'], undefined);
+  assert.equal(amb.aba('Anticoncepcional').objetos().length, 1);
+});
+
+test('anticoncepcional: recusa dia futuro, data e hora inválidas; madrugada conta para o dia anterior', () => {
+  const amb = preparado();
+  amb.falha('ela', 'marcarRemedio', { data: '2026-11-19', hora: '21:00' });
+  amb.falha('ela', 'marcarRemedio', { data: 'ontem', hora: '21:00' });
+  amb.falha('ela', 'marcarRemedio', { data: '2026-11-18', hora: '25:00' });
+  amb.falha('ela', 'marcarRemedio', { data: '2026-11-18', hora: '' });
+  amb.falha('ela', 'marcarRemedio', { data: '2026-11-18', hora: '=1+1' });
+  assert.equal(amb.aba('Anticoncepcional').objetos().length, 0);
+
+  amb.definirAgora('2026-11-19T01:00:00-03:00');
+  amb.falha('ela', 'marcarRemedio', { data: '2026-11-19', hora: '01:00' });
+  const e = amb.ok('ela', 'marcarRemedio', { data: '2026-11-18', hora: '01:00' }).estado;
+  assert.equal(e.remedio['2026-11-18'].hora, '01:00');
+});
+
+test('anticoncepcional: lê horas digitadas à mão na planilha (horário ou fração do dia)', () => {
+  const amb = preparado();
+  amb.aba('Anticoncepcional').acrescentarCru({ data: '2026-11-15', hora: 0.875, marcado_por: 'ela' });
+  amb.aba('Anticoncepcional').acrescentarCru({ data: '16/11/2026', hora: '8:00', marcado_por: 'ELA' });
+  const e = amb.ok('ele', 'estado').estado;
+  assert.deepEqual(e.remedio['2026-11-15'], { hora: '21:00', por: 'ela' });
+  assert.deepEqual(e.remedio['2026-11-16'], { hora: '08:00', por: 'ela' });
 });

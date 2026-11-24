@@ -11,7 +11,7 @@
  * Funções que terminam com "_" são privadas: o Apps Script não deixa chamá-las de fora.
  */
 
-var VERSAO = '1.1.0';
+var VERSAO = '1.2.0';
 var FUSO = 'America/Sao_Paulo';
 var PESSOAS = ['ele', 'ela'];
 var MAX_ERROS_PIN = 5;
@@ -32,7 +32,8 @@ var ABAS = {
   Dieta: ['data', 'pessoa', 'refeicao', 'alimento', 'quantidade', 'kcal', 'proteina_g', 'carbo_g', 'gordura_g', 'obs'],
   Peso: ['data', 'pessoa', 'peso_kg'],
   Momentos: ['data', 'pessoa', 'recado', 'foto_id', 'miniatura_id', 'atualizado_em'],
-  Miniaturas: ['id', 'base64']
+  Miniaturas: ['id', 'base64'],
+  Anticoncepcional: ['data', 'hora', 'marcado_por', 'atualizado_em']
 };
 
 // Colunas guardadas como texto puro (evita a planilha transformar "2026-11-19" ou "1/2 xícara" em data).
@@ -40,7 +41,7 @@ var COLUNAS_TEXTO = {
   id: true, data: true, feita_em: true, criada_em: true, registrado_em: true, atualizada_em: true,
   atualizado_em: true, prazo: true, meta_id: true, foto_id: true, miniatura_id: true, pessoa: true,
   texto: true, recado: true, titulo: true, unidade: true, refeicao: true, alimento: true,
-  quantidade: true, obs: true, origem: true, pendencia: true, base64: true
+  quantidade: true, obs: true, origem: true, pendencia: true, base64: true, hora: true, marcado_por: true
 };
 
 // Cache por execução (no Apps Script cada requisição começa do zero; no servidor local é zerado em doPost).
@@ -117,7 +118,8 @@ function despachar_(c) {
     salvarMetaSemana: acaoSalvarMetaSemana_,
     marcarMetaSemana: acaoMarcarMetaSemana_,
     salvarMetaLongo: acaoSalvarMetaLongo_,
-    salvarMomento: acaoSalvarMomento_
+    salvarMomento: acaoSalvarMomento_,
+    marcarRemedio: acaoMarcarRemedio_
   };
   var acao = String(c.acao || '');
   if (publicas.hasOwnProperty(acao)) return publicas[acao](c);
@@ -321,8 +323,61 @@ function montarEstado_(eu, opcoes) {
     dieta: dieta,
     dietaDias: dietaDias,
     peso: peso,
-    momentos: momentos
+    momentos: momentos,
+    remedio: lerRemedio_()
   };
+}
+
+/* =========================================================================
+ * Anticoncepcional (calendário: um dia marcado = tomou, com a hora)
+ * ========================================================================= */
+
+/** Mapa { "aaaa-mm-dd": { hora: "21:30", por: "ela" } } com todos os dias marcados. */
+function lerRemedio_() {
+  var dias = {};
+  ler_('Anticoncepcional').forEach(function (r) {
+    var d = dataStr_(r.data);
+    if (!d) return;
+    dias[d] = { hora: horaStr_(r.hora), por: pessoa_(r.marcado_por) || '' };
+  });
+  return dias;
+}
+
+/** Marca (ou muda a hora de) um dia; com "desmarcar" tira a marca. Os dois podem marcar. */
+function acaoMarcarRemedio_(c, eu) {
+  var data = dataStr_(c.data);
+  if (!data || !/^\d{4}-\d{2}-\d{2}$/.test(String(c.data).trim())) throw erro_('Data inválida.');
+  if (data > hoje_()) throw erro_('Não dá para marcar um dia que ainda não chegou.');
+  var linhas = ler_('Anticoncepcional').filter(function (r) { return dataStr_(r.data) === data; });
+  if (c.desmarcar) {
+    // Apaga de baixo para cima para os números das linhas não mudarem no meio do caminho.
+    linhas.sort(function (a, b) { return b._linha - a._linha; }).forEach(function (r) { excluirLinha_('Anticoncepcional', r._linha); });
+  } else {
+    var hora = horaStr_(c.hora);
+    if (!hora) throw erro_('Hora inválida. Use o formato 21:30.');
+    var campos = { data: data, hora: hora, marcado_por: eu, atualizado_em: agoraIso_() };
+    if (linhas.length) atualizar_('Anticoncepcional', linhas[0]._linha, campos);
+    else acrescentar_('Anticoncepcional', campos);
+  }
+  return { estado: montarEstado_(eu) };
+}
+
+/** Converte "21:30", "9:05", "21h30", um horário Date ou fração de dia da planilha para "HH:mm" ("" se inválido). */
+function horaStr_(v) {
+  if (v === null || v === undefined || v === '') return '';
+  if (Object.prototype.toString.call(v) === '[object Date]') {
+    return isNaN(v.getTime()) ? '' : Utilities.formatDate(v, FUSO, 'HH:mm');
+  }
+  if (typeof v === 'number') {
+    if (v < 0 || v >= 1) return '';
+    var min = Math.round(v * 1440) % 1440;
+    return pad2_(Math.floor(min / 60)) + ':' + pad2_(min % 60);
+  }
+  var m = /^(\d{1,2})\s*[:h]\s*(\d{2})?(?::\d{2})?$/i.exec(String(v).trim());
+  if (!m) return '';
+  var hh = +m[1], mm = m[2] ? +m[2] : 0;
+  if (hh > 23 || mm > 59) return '';
+  return pad2_(hh) + ':' + pad2_(mm);
 }
 
 /* =========================================================================

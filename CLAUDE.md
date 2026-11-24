@@ -46,6 +46,7 @@ Abas e colunas (ordem atual):
 | Tarefas | id, pessoa, data, texto, feita, feita_em, criada_em, origem, pendencia |
 | MetasSemana | id, pessoa, titulo, vezes_por_semana, ativa, criada_em |
 | MetasLongo | id, pessoa, titulo, inicial, atual, alvo, unidade, prazo, ativa, atualizada_em |
+| Anticoncepcional | data, hora, marcado_por, atualizado_em |
 
 Dieta:
 - Uma linha por alimento ou prato. `refeicao`: "Café da manhã", "Almoço", "Lanche", "Jantar" ou "Ceia".
@@ -54,6 +55,8 @@ Dieta:
 - Metas de dieta: atualize a linha `ele` ou `ela` da aba Pessoas (ex.: `Pessoas!B2` é a meta_kcal dele, `Pessoas!B3` a dela; confira a ordem antes).
 
 Peso: uma linha por pesagem (`data`, `pessoa`, `peso_kg`).
+
+Anticoncepcional (dias em que ela tomou): uma linha por dia; `hora` como texto `HH:mm`, `marcado_por` = `ele` ou `ela`. Se o dia já tem linha, atualize a hora em vez de criar outra.
 
 Tarefas criadas pelo Claude: `id` = `t_` + 12 caracteres aleatórios (letras minúsculas e números), `feita` = `FALSE`, `criada_em` = `aaaa-mm-ddTHH:mm:ss` (São Paulo), `origem` = `claude`, `pendencia` vazio. "Lista de amanhã" = data de amanhã. Se o id ficar vazio, o site cria um sozinho.
 

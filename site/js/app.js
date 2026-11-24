@@ -407,7 +407,8 @@
       cartaoTarefas({ titulo: 'Tarefas de hoje', icone: 'check', data: e.hoje, listas: e.tarefas.hoje, chave: 'hoje' }),
       cartaoPendentes(e),
       cartaoDieta(e),
-      cartaoMetasSemana(e)
+      cartaoMetasSemana(e),
+      cartaoRemedio(e)
     ];
   }
 
@@ -742,6 +743,114 @@
     render();
     if (delta > 0 && m.feitas === m.vezes) toast('Meta da semana cumprida: ' + m.titulo);
     executar('marcarMetaSemana', { id: m.id, delta: delta }, { reverter: function () { m.feitas = Math.max(0, m.feitas - delta); render(); } }).catch(nada);
+  }
+
+  /* ---------- Anticoncepcional (calendário do mês) ---------- */
+
+  var MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  var MESES_ATRAS = 12; // quantos meses para trás dá para navegar
+
+  /* Soma n meses a "aaaa-mm". */
+  function somarMes(mes, n) {
+    var p = mes.split('-').map(Number);
+    var t = p[0] * 12 + (p[1] - 1) + n;
+    return Math.floor(t / 12) + '-' + ('0' + (t % 12 + 1)).slice(-2);
+  }
+
+  function horaAgora() {
+    var d = new Date();
+    return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+  }
+
+  /* Hora sugerida para um dia passado: a da marcação mais recente (o remédio costuma ser no mesmo horário). */
+  function horaHabitual(rem) {
+    var dias = Object.keys(rem).sort();
+    return dias.length ? rem[dias[dias.length - 1]].hora : '21:00';
+  }
+
+  function cartaoRemedio(e) {
+    var rem = e.remedio || {};
+    var mesHoje = e.hoje.slice(0, 7);
+    var limite = somarMes(mesHoje, -MESES_ATRAS);
+    var mes = S.mesRemedio && S.mesRemedio < mesHoje && S.mesRemedio >= limite ? S.mesRemedio : mesHoje;
+    function ir(n) { S.mesRemedio = somarMes(mes, n); render(); }
+    var p = mes.split('-').map(Number);
+    var nomeMes = MESES[p[1] - 1] + (p[0] !== Number(e.hoje.slice(0, 4)) ? ' ' + p[0] : '');
+    var nav = h('div', { class: 'nav-dia cal-cab' },
+      h('button', { class: 'botao-icone', type: 'button', 'aria-label': 'Mês anterior', disabled: mes <= limite, onclick: function () { ir(-1); } }, icone('seta_esq')),
+      h('span', { class: 'nav-dia-rotulo', 'aria-live': 'polite' }, nomeMes),
+      h('button', { class: 'botao-icone', type: 'button', 'aria-label': 'Próximo mês', disabled: mes >= mesHoje, onclick: function () { ir(1); } }, icone('seta_dir')));
+
+    var hojeMarcado = rem[e.hoje];
+    var topo = hojeMarcado
+      ? h('div', { class: 'remedio-status feito' }, h('span', {}, icone('check'), 'Hoje: tomou às ' + hojeMarcado.hora),
+        h('button', { class: 'botao pequeno leve', type: 'button', onclick: function () { editarRemedio(e.hoje); } }, icone('lapis'), 'Editar'))
+      : h('div', { class: 'remedio-status' }, h('span', {}, 'Hoje ainda não foi marcado.'),
+        h('button', { class: 'botao pequeno', type: 'button', onclick: tomouAgora }, icone('check'), 'Tomou agora'));
+
+    // Grade do mês, começando no domingo
+    var diasNoMes = new Date(Date.UTC(p[0], p[1], 0)).getUTCDate();
+    var primeiro = new Date(Date.UTC(p[0], p[1] - 1, 1)).getUTCDay();
+    var celulas = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map(function (l) { return h('span', { class: 'cal-sem', 'aria-hidden': 'true' }, l); });
+    for (var v = 0; v < primeiro; v++) celulas.push(h('span', {}));
+    var tomados = 0;
+    for (var d = 1; d <= diasNoMes; d++) {
+      var iso = mes + '-' + ('0' + d).slice(-2);
+      var marca = rem[iso];
+      var futuro = iso > e.hoje;
+      if (marca) tomados++;
+      var rotuloDia = dataBr(iso, { day: 'numeric', month: 'long' }) + (marca ? ': tomou às ' + marca.hora : futuro ? '' : ': não marcado');
+      celulas.push(h('button', {
+        class: 'cal-dia' + (marca ? ' marcado' : '') + (iso === e.hoje ? ' hoje' : ''), type: 'button',
+        disabled: futuro, 'aria-label': rotuloDia, onclick: (function (x) { return function () { editarRemedio(x); }; })(iso)
+      }, h('span', { class: 'cal-num' }, d), marca ? h('span', { class: 'cal-hora' }, marca.hora) : null));
+    }
+    var passados = mes === mesHoje ? Number(e.hoje.slice(8)) : diasNoMes;
+    return h('section', { class: 'cartao p-ela' },
+      tituloCartao('pilula', 'Anticoncepcional'),
+      topo,
+      nav,
+      h('div', { class: 'calendario' }, celulas),
+      h('p', { class: 'remedio-resumo' }, tomados + ' de ' + passados + (passados === 1 ? ' dia marcado' : ' dias marcados')));
+  }
+
+  function tomouAgora() {
+    var e = S.estado;
+    if (!e.remedio) e.remedio = {};
+    var dia = e.hoje;
+    var hora = horaAgora();
+    e.remedio[dia] = { hora: hora, por: eu() };
+    render();
+    toast('Marcado: tomou às ' + hora);
+    executar('marcarRemedio', { data: dia, hora: hora }, { reverter: function () { delete e.remedio[dia]; render(); } }).catch(nada);
+  }
+
+  function editarRemedio(dia) {
+    var e = S.estado;
+    var rem = e.remedio || {};
+    var marca = rem[dia];
+    var hora = campoModal({ type: 'time', 'aria-label': 'Hora' }, marca ? marca.hora : (dia === e.hoje ? horaAgora() : horaHabitual(rem)));
+    var salvar = h('button', { class: 'botao', type: 'button' }, 'Salvar');
+    salvar.addEventListener('click', function () {
+      if (!hora.value) return toast('Escolha a hora.', 'erro');
+      enviarModal(salvar, 'marcarRemedio', { data: dia, hora: hora.value }, marca ? 'Hora atualizada' : 'Dia marcado');
+    });
+    var acoes = [];
+    if (marca) {
+      var tirar = h('button', { class: 'botao perigo', type: 'button', style: 'margin-right:auto' }, icone('x'), 'Desmarcar');
+      tirar.addEventListener('click', function () { enviarModal(tirar, 'marcarRemedio', { data: dia, desmarcar: true }, 'Dia desmarcado'); });
+      acoes.push(tirar);
+    }
+    acoes.push(h('button', { class: 'botao leve', type: 'button', onclick: fecharModal }, 'Cancelar'), salvar);
+    var titulo = dataBr(dia, { weekday: 'long', day: 'numeric', month: 'long' });
+    abrirModal({
+      titulo: titulo.charAt(0).toUpperCase() + titulo.slice(1), classe: 'p-ela',
+      corpo: [
+        rotulo(marca ? 'Tomou às' : 'Que horas tomou?', hora),
+        marca && marca.por ? h('p', { class: 'dica' }, 'Marcado por ' + (marca.por === eu() ? 'você' : 'Amor') + '.') : null
+      ],
+      acoes: acoes
+    });
   }
 
   /* =====================================================================
