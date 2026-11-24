@@ -1,6 +1,6 @@
 # Nós dois — dashboard do casal
 
-Site para um casal acompanhar o dia a dia: tarefas (de hoje e de amanhã), metas da semana e de longo prazo, dieta (calorias, macros, peso), foto e recado do dia, progresso e memórias.
+Site para um casal acompanhar o dia a dia: tarefas (de hoje e de amanhã), metas da semana e de longo prazo, dieta (calorias, macros, peso), quadro do dia (desenho compartilhado; até 23/11/2026 era foto + recado), anticoncepcional, progresso e memórias.
 
 - `ele` = o dono do projeto (quem conversa com o Claude). `ela` = a namorada dele.
 - No site, cada um se vê como "Eu" e o outro como "Amor". Cores fixas: ele = menta, ela = pêssego.
@@ -10,7 +10,7 @@ Site para um casal acompanhar o dia a dia: tarefas (de hoje e de amanhã), metas
 
 ```
 site/ (GitHub Pages, JS puro)  --POST JSON + token-->  apps-script/Code.js (web app)  -->  Planilha Google
-                                                               └──> Drive (fotos, privadas)
+                                                               └──> Drive (fotos antigas, privadas)
 Claude (conector Google Sheets) ---------------------------------------------------------> Planilha
 ```
 
@@ -34,7 +34,7 @@ Regras gerais:
 - `pessoa` é sempre `ele` ou `ela` (minúsculo).
 - Números como números (ex.: `72.5`, não `"72,5"`). Ao ler, a planilha devolve decimais com vírgula; isso é normal.
 - Um pedido explícito ("registra que comi X") já é a aprovação: registre e mostre um resumo. Se a estimativa for muito incerta (porção desconhecida), pergunte antes.
-- Nunca mexa nas abas `Momentos`, `Miniaturas` e `MetasSemanaLog` (são do site). Nunca apague linhas sem pedido explícito.
+- Nunca mexa nas abas `Quadro`, `Momentos`, `Miniaturas` e `MetasSemanaLog` (são do site). Nunca apague linhas sem pedido explícito.
 
 Abas e colunas (ordem atual):
 

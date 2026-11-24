@@ -154,11 +154,45 @@ function semear(amb, opcoes = {}) {
     }
     momentos.acrescentarCru({ data: d, pessoa: p, recado: recados[p][i % recados[p].length], foto_id: fotoId, miniatura_id: miniId, atualizado_em: d + 'T08:30:00' });
   };
-  for (let n = -10; n <= -1; n++) {
+  // Fotos e recados ficam nos dias mais antigos (antes de o quadro existir)
+  for (let n = -10; n <= -4; n++) {
     addMomento('ele', dia(n), rnd() < 0.5, n + 10);
     if (n !== -6) addMomento('ela', dia(n), rnd() < 0.6, n + 11);
   }
-  addMomento('ela', dia(0), true, 1);
+
+  // Quadro do dia: desenhos nos últimos 3 dias e um coração dela hoje
+  const quadro = aba('Quadro');
+  const r = (v) => Math.round(Math.min(1000, Math.max(0, v)));
+  const coracao = (cx, cy, s, w) => {
+    const t = [w];
+    for (let a = 0; a <= Math.PI * 2 + 0.01; a += 0.12) {
+      t.push(r(cx + s * 16 * Math.sin(a) ** 3), r(cy - s * (13 * Math.cos(a) - 5 * Math.cos(2 * a) - 2 * Math.cos(3 * a) - Math.cos(4 * a))));
+    }
+    return t;
+  };
+  const onda = (y, w, fase) => {
+    const t = [w];
+    for (let x = 80; x <= 920; x += 20) t.push(x, r(y + 40 * Math.sin(x / 70 + fase)));
+    return t;
+  };
+  const sol = (cx, cy, raio, w) => {
+    const tracos = [];
+    const c = [w];
+    for (let a = 0; a <= Math.PI * 2 + 0.01; a += 0.2) c.push(r(cx + raio * Math.cos(a)), r(cy + raio * Math.sin(a)));
+    tracos.push(c);
+    for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) {
+      tracos.push([w, r(cx + raio * 1.3 * Math.cos(a)), r(cy + raio * 1.3 * Math.sin(a)), r(cx + raio * 1.7 * Math.cos(a)), r(cy + raio * 1.7 * Math.sin(a))]);
+    }
+    return tracos;
+  };
+  const addQuadro = (d, p, tracos) => quadro.acrescentarCru({ data: d, pessoa: p, tracos: JSON.stringify(tracos), atualizado_em: d + 'T22:00:00' });
+  addQuadro(dia(-3), 'ele', sol(300, 280, 110, 11));
+  addQuadro(dia(-3), 'ela', [onda(700, 11, 0), onda(800, 5, 1)]);
+  addQuadro(dia(-2), 'ela', [coracao(500, 480, 18, 11)]);
+  addQuadro(dia(-2), 'ele', [coracao(500, 480, 11, 5)]);
+  addQuadro(dia(-1), 'ele', [onda(300, 24, 0.5)]);
+  addQuadro(dia(-1), 'ela', [onda(600, 24, 2)]);
+  addQuadro(dia(0), 'ela', [coracao(700, 300, 10, 11)]);
 }
 
 module.exports = { semear, PINS_TESTE };

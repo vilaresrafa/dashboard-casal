@@ -204,7 +204,7 @@
   function podeRenderizarAgora() {
     var a = document.activeElement;
     var digitando = a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA') && casca && casca.main.contains(a) && a.value;
-    return !modalAtual && !visorAtual && !digitando && !S.editando;
+    return !modalAtual && !visorAtual && !Quadro.aberto() && !digitando && !S.editando;
   }
 
   function aplicarEstado(novo, forcar) {
@@ -353,12 +353,6 @@
     casca.main.replaceChildren();
     anexar(casca.main, conteudo);
     restaurarFoco(foco);
-    if (S.aba === 'hoje') {
-      osDois().forEach(function (p) {
-        var m = S.estado.momentos[p];
-        if (m && m.fotoId) baixarFoto(m.fotoId);
-      });
-    }
   }
 
   function capturarFoco() {
@@ -403,7 +397,7 @@
   function telaHoje() {
     var e = S.estado;
     return [
-      cartaoMomentos(e),
+      cartaoQuadro(e),
       cartaoTarefas({ titulo: 'Tarefas de hoje', icone: 'check', data: e.hoje, listas: e.tarefas.hoje, chave: 'hoje' }),
       cartaoPendentes(e),
       cartaoDieta(e),
@@ -412,14 +406,71 @@
     ];
   }
 
-  function cartaoMomentos(e) {
-    return h('section', { class: 'cartao' },
-      tituloCartao('coracao', 'Momento do dia'),
-      h('div', { class: 'duas-colunas' }, osDois().map(function (p) { return blocoMomento(p, e.momentos[p], true, false); })));
+  /* ---------- Quadro do dia ---------- */
+
+  function tracosDoDia(e) {
+    return e.quadro || { ele: [], ela: [] };
   }
 
-  function blocoMomento(p, m, ehHoje, mini) {
-    var meu = p === eu();
+  function coresCaneta() {
+    return { ele: corDe('ele', 'caneta'), ela: corDe('ela', 'caneta') };
+  }
+
+  function cartaoQuadro(e) {
+    var tracos = tracosDoDia(e);
+    var vazio = !Quadro.total(tracos);
+    var info = osDois().map(function (p) {
+      var n = (tracos[p] || []).length;
+      return h('span', { class: 'p-' + p }, h('span', { class: 'bolinha' }), nome(p) + (n ? ': ' + n + (n === 1 ? ' traço' : ' traços') : ': ainda não desenhou'));
+    });
+    return h('section', { class: 'cartao' },
+      tituloCartao('lapis', 'Quadro do dia'),
+      h('button', { class: 'quadro-previa', type: 'button', 'aria-label': vazio ? 'Abrir o quadro para desenhar' : 'Abrir o quadro do dia', onclick: abrirQuadro },
+        Quadro.svg(tracos, coresCaneta(), 'Desenho de hoje'),
+        vazio ? h('span', { class: 'quadro-vazio' }, icone('lapis'), 'Toque para desenhar') : null),
+      h('div', { class: 'legenda quadro-legenda' }, info),
+      h('button', { class: 'botao pequeno', type: 'button', onclick: abrirQuadro }, icone('lapis'), vazio ? 'Desenhar' : 'Abrir o quadro'));
+  }
+
+  function abrirQuadro() {
+    var e = S.estado;
+    var dia = e.hoje;
+    Quadro.abrir({
+      eu: eu(), outro: amor(), cores: coresCaneta(), tracos: tracosDoDia(e),
+      salvar: function (lista) {
+        S.emVoo++;
+        marcarAtualizando();
+        return API.chamar('salvarQuadro', { data: dia, tracos: lista }).then(function (r) {
+          S.emVoo--;
+          marcarAtualizando();
+          if (S.estado && S.estado.hoje === dia) S.estado.quadro = r.quadro.tracos;
+          S.progresso = null;
+          return r.quadro;
+        }, function (err) {
+          S.emVoo--;
+          marcarAtualizando();
+          throw err;
+        });
+      },
+      buscar: function () { return API.chamar('quadro').then(function (r) { return r.quadro.data === dia ? r.quadro : null; }); },
+      avisar: toast,
+      aoErro: function (err) {
+        if (err && err.codigo === 'dia_virou') { atualizar(true); return true; }
+        return err && err.codigo === 'sessao';
+      },
+      aoFechar: function (final) {
+        if (S.estado && S.estado.hoje === dia) {
+          S.estado.quadro = final;
+          salvarJson(CHAVE_ESTADO, S.estado);
+        }
+        S.renderPendente = false;
+        render();
+      }
+    });
+  }
+
+  /* Momento antigo (foto + recado, usado até virar quadro): aparece só nas Memórias. */
+  function blocoMomento(p, m) {
     var etiqueta = h('span', { class: 'etiqueta' }, h('span', { class: 'bolinha' }), nome(p));
     var foto;
     if (m && m.fotoId) {
@@ -427,19 +478,10 @@
       foto = h('button', { class: 'momento-foto', type: 'button', 'aria-label': 'Ver foto de ' + nome(p), onclick: function () { abrirVisor(m, p); } },
         src ? h('img', { src: src, alt: 'Foto de ' + nome(p), 'data-foto': m.fotoId }) : icone('imagem'), etiqueta);
     } else {
-      var podePostar = meu && ehHoje;
-      var aviso = podePostar ? 'Poste sua foto do dia' : (ehHoje ? 'Amor ainda não postou foto hoje' : 'Sem foto neste dia');
-      foto = h(podePostar ? 'button' : 'div', {
-        class: 'momento-foto', type: podePostar ? 'button' : null, onclick: podePostar ? abrirMomento : null,
-        'aria-label': podePostar ? 'Postar foto do dia' : null
-      }, h('div', {}, icone(podePostar ? 'camera' : 'coracao'), h('p', { class: 'momento-vazio-txt' }, aviso)), etiqueta);
+      foto = h('div', { class: 'momento-foto' }, h('div', {}, icone('coracao'), h('p', { class: 'momento-vazio-txt' }, 'Sem foto neste dia')), etiqueta);
     }
-    var recado = m && m.recado
-      ? h('p', { class: 'balao' }, m.recado)
-      : h('p', { class: 'balao vazio-balao' }, meu ? (ehHoje ? 'Sem recado ainda' : 'Sem recado') : 'Sem recado');
-    return h('div', { class: 'momento p-' + p + (mini ? ' mini' : '') }, foto, recado,
-      meu && ehHoje ? h('button', { class: 'botao pequeno secundario', type: 'button', onclick: abrirMomento },
-        icone(m ? 'lapis' : 'camera'), m ? 'Editar' : 'Postar') : null);
+    var recado = m && m.recado ? h('p', { class: 'balao' }, m.recado) : h('p', { class: 'balao vazio-balao' }, 'Sem recado');
+    return h('div', { class: 'momento mini p-' + p }, foto, recado);
   }
 
   function cartaoTarefas(o) {
@@ -1073,7 +1115,7 @@
           h('div', { class: 'bloco-rot' }, 'Nós dois'),
           h('div', { class: 'bloco-sub' }, 'recorde ' + p.sequenciaCasal.recorde))),
       h('p', { class: 'dica', style: 'margin-top:12px' }, icone('estrela'),
-        'Cada um: dias seguidos com todas as tarefas feitas (dias sem tarefas não contam). Nós dois: dias seguidos em que os dois postaram o momento do dia.'));
+        'Cada um: dias seguidos com todas as tarefas feitas (dias sem tarefas não contam). Nós dois: dias seguidos em que os dois desenharam no quadro do dia.'));
   }
 
   function pct(c) { return c && c.total ? c.feitas / c.total : null; }
@@ -1190,101 +1232,26 @@
       if (M.erro) return h('section', { class: 'cartao largo' }, h('p', { class: 'vazio' }, M.erro),
         h('button', { class: 'botao pequeno', type: 'button', onclick: function () { S.memorias = memoriasVazias(); render(); } }, 'Tentar de novo'));
       return h('section', { class: 'cartao largo' }, tituloCartao('imagem', 'Memórias'),
-        h('p', { class: 'vazio' }, 'Os momentos de cada dia ficam guardados aqui a partir de amanhã. Que tal postar o de hoje?'),
-        h('button', { class: 'botao pequeno', type: 'button', onclick: function () { irPara('hoje'); } }, icone('camera'), 'Ir para Hoje'));
+        h('p', { class: 'vazio' }, 'O quadro de cada dia fica guardado aqui a partir de amanhã. Que tal desenhar no de hoje?'),
+        h('button', { class: 'botao pequeno', type: 'button', onclick: function () { irPara('hoje'); } }, icone('lapis'), 'Ir para Hoje'));
     }
     var anoAtual = S.estado.hoje.slice(0, 4);
     var cartoes = M.dias.map(function (d) {
       var opcoes = { weekday: 'long', day: 'numeric', month: 'long' };
       if (d.data.slice(0, 4) !== anoAtual) opcoes.year = 'numeric';
+      var titulo = dataBr(d.data, opcoes);
+      var temMomento = d[eu()] || d[amor()];
       return h('section', { class: 'cartao' },
-        h('h2', { class: 'memoria-data' }, dataBr(d.data, opcoes)),
-        h('div', { class: 'duas-colunas' }, osDois().map(function (p) { return blocoMomento(p, d[p], false, true); })));
+        h('h2', { class: 'memoria-data' }, titulo),
+        d.quadro ? h('button', { class: 'quadro-previa', type: 'button', 'aria-label': 'Ver o quadro de ' + titulo, onclick: function () { abrirVisorQuadro(d.quadro, titulo); } },
+          Quadro.svg(d.quadro, coresCaneta(), 'Quadro de ' + titulo)) : null,
+        temMomento ? h('div', { class: 'duas-colunas', style: d.quadro ? 'margin-top:12px' : null }, osDois().map(function (p) { return blocoMomento(p, d[p]); })) : null);
     });
     var rodape = M.temMais
       ? h('button', { class: 'botao secundario largo', type: 'button', disabled: M.carregando, onclick: carregarMemorias },
         M.carregando ? h('span', { class: 'spinner' }) : null, M.carregando ? 'Carregando...' : 'Carregar mais')
       : h('p', { class: 'vazio largo', style: 'text-align:center' }, 'Essas são todas as memórias, por enquanto.');
     return cartoes.concat([rodape]);
-  }
-
-  /* =====================================================================
-   * Momento do dia (modal de postar/editar)
-   * ===================================================================== */
-
-  function abrirMomento() {
-    var m = S.estado.momentos[eu()];
-    var st = { foto: null, miniatura: null, remover: false, preparando: false };
-    var previa = h('div', { class: 'previa' });
-    var entrada = h('input', { type: 'file', accept: 'image/*', class: 'sr-only', tabindex: '-1', 'aria-hidden': 'true' });
-    var escolher = h('button', { class: 'botao secundario pequeno', type: 'button', onclick: function () { entrada.click(); } }, icone('camera'), 'Escolher foto');
-    var remover = h('button', { class: 'botao leve pequeno', type: 'button' }, icone('lixeira'), 'Remover foto');
-    var texto = h('textarea', { class: 'campo', maxlength: 500, placeholder: 'Um recadinho para o amor...', 'aria-label': 'Recado para o amor' });
-    texto.value = m ? m.recado : '';
-    var contador = h('p', { class: 'contador' });
-    var salvar = h('button', { class: 'botao', type: 'button' }, 'Salvar');
-
-    function fotoAtual() {
-      if (st.foto) return st.foto;
-      if (st.remover || !m || !m.fotoId) return null;
-      return S.fotos[m.fotoId] || m.miniatura;
-    }
-    function desenhar() {
-      var src = fotoAtual();
-      previa.replaceChildren(st.preparando ? h('span', { class: 'spinner' }) : (src ? h('img', { src: src, alt: 'Prévia da foto' }) : icone('camera')));
-      remover.hidden = !src;
-      escolher.lastChild.textContent = src ? 'Trocar foto' : 'Escolher foto';
-    }
-    function contar() { contador.textContent = texto.value.length + '/500'; }
-
-    entrada.addEventListener('change', function () {
-      var arq = entrada.files && entrada.files[0];
-      if (!arq) return;
-      st.preparando = true;
-      desenhar();
-      Fotos.preparar(arq).then(function (r) {
-        st.foto = r.foto;
-        st.miniatura = r.miniatura;
-        st.remover = false;
-      }).catch(function (e) {
-        toast(e.message, 'erro');
-      }).then(function () {
-        st.preparando = false;
-        entrada.value = '';
-        desenhar();
-      });
-    });
-    remover.addEventListener('click', function () { st.foto = null; st.miniatura = null; st.remover = true; desenhar(); });
-    texto.addEventListener('input', contar);
-    salvar.addEventListener('click', function () {
-      if (st.preparando) return toast('Espere a foto terminar de carregar.', 'erro');
-      var dados = { recado: texto.value };
-      if (st.foto) { dados.foto = st.foto; dados.miniatura = st.miniatura; }
-      else if (st.remover) dados.removerFoto = true;
-      var vaiFicarVazio = !texto.value.trim() && !fotoAtual();
-      if (vaiFicarVazio && !m) return toast('Escreva um recado ou escolha uma foto.', 'erro');
-      ocupado(salvar, true, st.foto ? 'Enviando foto...' : 'Salvando...');
-      API.chamar('salvarMomento', dados, { timeout: 90000 }).then(function (r) {
-        var novo = r.estado.momentos[eu()];
-        if (st.foto && novo && novo.fotoId) S.fotos[novo.fotoId] = st.foto;
-        fecharModal();
-        S.memorias = memoriasVazias();
-        S.progresso = null;
-        aplicarEstado(r.estado, true);
-        toast(vaiFicarVazio ? 'Momento apagado' : 'Momento salvo');
-      }).catch(function (e) {
-        ocupado(salvar, false);
-        toast(e.message, 'erro');
-      });
-    });
-
-    desenhar();
-    contar();
-    abrirModal({
-      titulo: 'Seu momento de hoje', classe: 'p-' + eu(),
-      corpo: [previa, h('div', { class: 'linha-botoes' }, escolher, remover), entrada, rotulo('Recado para o amor', texto), contador],
-      acoes: [h('button', { class: 'botao leve', type: 'button', onclick: fecharModal }, 'Cancelar'), salvar]
-    });
   }
 
   /* =====================================================================
@@ -1346,6 +1313,19 @@
     if (!S.fotos[m.fotoId]) {
       baixarFoto(m.fotoId).then(function (f) { if (f && visorAtual === visor) img.src = f; });
     }
+  }
+
+  function abrirVisorQuadro(tracos, titulo) {
+    fecharVisor();
+    var visor = h('div', { class: 'visor', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Quadro de ' + titulo },
+      h('button', { class: 'botao-icone fechar', type: 'button', 'aria-label': 'Fechar', onclick: fecharVisor }, icone('x')),
+      h('div', { class: 'visor-quadro' }, Quadro.svg(tracos, coresCaneta(), 'Quadro de ' + titulo),
+        h('p', { class: 'visor-legenda' }, titulo)));
+    visor.addEventListener('click', function (ev) { if (ev.target === visor) fecharVisor(); });
+    document.body.appendChild(visor);
+    document.body.style.overflow = 'hidden';
+    visorAtual = visor;
+    visor.querySelector('.fechar').focus();
   }
 
   function fecharVisor() {
@@ -1511,7 +1491,7 @@
   });
 
   setInterval(function () {
-    if (!document.hidden && API.sessao && S.estado && !modalAtual) atualizar(true);
+    if (!document.hidden && API.sessao && S.estado && !modalAtual && !Quadro.aberto()) atualizar(true);
   }, CONFIG.INTERVALO_ATUALIZACAO_MS || 60000);
 
   if (S.estado && (!API.sessao || S.estado.eu !== API.sessao.pessoa)) S.estado = null;

@@ -46,7 +46,7 @@ test('prepararPlanilha cria todas as abas com cabeçalhos e é idempotente', () 
   amb.ctx.prepararPlanilha_();
   amb.ctx.prepararPlanilha_();
   const nomes = amb.ss.getSheets().map((s) => s.getName()).sort();
-  assert.deepEqual(nomes, ['Anticoncepcional', 'Dieta', 'MetasLongo', 'MetasSemana', 'MetasSemanaLog', 'Miniaturas', 'Momentos', 'Peso', 'Pessoas', 'Tarefas']);
+  assert.deepEqual(nomes, ['Anticoncepcional', 'Dieta', 'MetasLongo', 'MetasSemana', 'MetasSemanaLog', 'Miniaturas', 'Momentos', 'Peso', 'Pessoas', 'Quadro', 'Tarefas']);
   const pessoas = amb.aba('Pessoas').objetos().map((o) => o.id);
   assert.deepEqual(pessoas, ['ele', 'ela']);
   assert.equal(amb.aba('Miniaturas').isSheetHidden(), true);
@@ -650,4 +650,85 @@ test('anticoncepcional: lê horas digitadas à mão na planilha (horário ou fra
   const e = amb.ok('ele', 'estado').estado;
   assert.deepEqual(e.remedio['2026-11-15'], { hora: '21:00', por: 'ela' });
   assert.deepEqual(e.remedio['2026-11-16'], { hora: '08:00', por: 'ela' });
+});
+
+/* ---------------- Quadro do dia ---------------- */
+
+const TRACO = (x) => [6, x, 100, x + 10, 120, x + 20, 140];
+
+test('quadro: os dois desenham no mesmo quadro sem um apagar o outro; desfazer e limpar só os seus', () => {
+  const amb = preparado();
+  let e = amb.ok('ele', 'estado').estado;
+  assert.deepEqual(e.quadro, { ele: [], ela: [] });
+
+  let q = amb.ok('ele', 'salvarQuadro', { data: '2026-11-18', tracos: [TRACO(10), TRACO(50)] }).quadro;
+  assert.equal(q.data, '2026-11-18');
+  assert.equal(q.tracos.ele.length, 2);
+  // ela desenha ao mesmo tempo: a linha dele continua
+  q = amb.ok('ela', 'salvarQuadro', { tracos: [TRACO(300)] }).quadro;
+  assert.equal(q.tracos.ele.length, 2);
+  assert.deepEqual(q.tracos.ela, [TRACO(300)]);
+  // a leitura leve devolve os dois
+  q = amb.ok('ele', 'quadro').quadro;
+  assert.deepEqual(q.tracos.ela, [TRACO(300)]);
+  // desfazer = mandar a lista sem o último traço
+  amb.ok('ele', 'salvarQuadro', { tracos: [TRACO(10)] });
+  assert.equal(amb.aba('Quadro').objetos().length, 2);
+  // limpar os meus = lista vazia: apaga só a linha dele
+  q = amb.ok('ele', 'salvarQuadro', { tracos: [] }).quadro;
+  assert.deepEqual(q.tracos.ele, []);
+  assert.deepEqual(q.tracos.ela, [TRACO(300)]);
+  assert.equal(amb.aba('Quadro').objetos().length, 1);
+  e = amb.ok('ela', 'estado').estado;
+  assert.deepEqual(e.quadro.ela, [TRACO(300)]);
+});
+
+test('quadro: limpa números fora do quadro e recusa formatos inválidos, quadro cheio e dia que virou', () => {
+  const amb = preparado();
+  const q = amb.ok('ela', 'salvarQuadro', { tracos: [[99, -5, 2000.4, 10.6, 20]] }).quadro;
+  assert.deepEqual(q.tracos.ela, [[60, 0, 1000, 11, 20]]);
+  amb.falha('ela', 'salvarQuadro', { tracos: 'oi' });
+  amb.falha('ela', 'salvarQuadro', { tracos: [[5, 1]] });
+  amb.falha('ela', 'salvarQuadro', { tracos: [[5, 1, 'x']] });
+  amb.falha('ela', 'salvarQuadro', { tracos: [[5]] });
+  const grande = [];
+  for (let i = 0; i < 400; i++) grande.push([4].concat(Array.from({ length: 40 }, (_, k) => 100 + k * 7)));
+  amb.falha('ela', 'salvarQuadro', { tracos: grande }, 'quadro_cheio');
+  amb.falha('ela', 'salvarQuadro', { data: '2026-11-17', tracos: [TRACO(1)] }, 'dia_virou');
+  assert.deepEqual(amb.ok('ela', 'quadro').quadro.tracos.ela, [[60, 0, 1000, 11, 20]]);
+});
+
+test('quadro: às 3h vira um quadro novo e o do dia vai para as Memórias junto com as fotos antigas', () => {
+  const amb = preparado('2026-11-17T20:00:00-03:00');
+  amb.ok('ele', 'salvarMomento', { recado: 'foto antiga', foto: JPEG, miniatura: MINI });
+  amb.definirAgora('2026-11-18T22:00:00-03:00');
+  amb.ok('ele', 'salvarQuadro', { tracos: [TRACO(10)] });
+  amb.ok('ela', 'salvarQuadro', { tracos: [TRACO(20)] });
+  amb.definirAgora('2026-11-19T02:00:00-03:00');
+  assert.equal(amb.ok('ela', 'estado').estado.quadro.ela.length, 1);
+  amb.definirAgora('2026-11-19T03:00:00-03:00');
+  assert.deepEqual(amb.ok('ela', 'estado').estado.quadro, { ele: [], ela: [] });
+
+  const r = amb.ok('ele', 'memorias', {});
+  assert.deepEqual(r.dias.map((d) => d.data), ['2026-11-18', '2026-11-17']);
+  assert.deepEqual(r.dias[0].quadro, { ele: [TRACO(10)], ela: [TRACO(20)] });
+  assert.equal(r.dias[0].ele, null);
+  assert.equal(r.dias[1].quadro, null);
+  assert.equal(r.dias[1].ele.miniatura, MINI);
+});
+
+test('progresso: os dois desenhando no quadro continua a sequência do casal', () => {
+  const amb = preparado('2026-11-16T09:00:00-03:00');
+  amb.ok('ele', 'salvarMomento', { recado: 'oi' });   // dia 16 ainda com recado (versão antiga)
+  amb.ok('ela', 'salvarMomento', { recado: 'oi!' });
+  amb.avancarDias(1);                                // 17: os dois desenham
+  amb.ok('ele', 'salvarQuadro', { tracos: [TRACO(1)] });
+  amb.ok('ela', 'salvarQuadro', { tracos: [TRACO(2)] });
+  amb.avancarDias(1);                                // 18: só ela desenha (ainda não quebra: o dia não acabou)
+  amb.ok('ela', 'salvarQuadro', { tracos: [TRACO(3)] });
+  let p = amb.ok('ele', 'progresso').progresso;
+  assert.deepEqual(p.sequenciaCasal, { atual: 2, recorde: 2 });
+  amb.ok('ele', 'salvarQuadro', { tracos: [TRACO(4)] });
+  p = amb.ok('ele', 'progresso').progresso;
+  assert.deepEqual(p.sequenciaCasal, { atual: 3, recorde: 3 });
 });

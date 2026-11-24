@@ -11,7 +11,7 @@
  * Funções que terminam com "_" são privadas: o Apps Script não deixa chamá-las de fora.
  */
 
-var VERSAO = '1.2.0';
+var VERSAO = '1.3.0';
 var FUSO = 'America/Sao_Paulo';
 var PESSOAS = ['ele', 'ela'];
 var MAX_ERROS_PIN = 5;
@@ -21,6 +21,8 @@ var LIMITE_MINIATURA_CHARS = 49000;     // uma célula aceita até 50.000 caract
 var DIAS_PENDENTES = 7;                 // tarefas não feitas aparecem como pendentes por 7 dias
 var HORA_VIRADA = 3;                    // o dia muda às 3h da manhã (horário de São Paulo), não à meia-noite
 var DIAS_DIETA = 14;                    // dias da dieta (com hoje) que o site pode navegar
+var LIMITE_QUADRO_CHARS = 49000;        // traços de uma pessoa num dia (uma célula aceita até 50.000 caracteres)
+var MAX_TRACOS = 2000;
 
 // Abas da planilha e suas colunas (a ordem pode mudar na planilha; o código lê pelo nome da coluna).
 var ABAS = {
@@ -33,7 +35,8 @@ var ABAS = {
   Peso: ['data', 'pessoa', 'peso_kg'],
   Momentos: ['data', 'pessoa', 'recado', 'foto_id', 'miniatura_id', 'atualizado_em'],
   Miniaturas: ['id', 'base64'],
-  Anticoncepcional: ['data', 'hora', 'marcado_por', 'atualizado_em']
+  Anticoncepcional: ['data', 'hora', 'marcado_por', 'atualizado_em'],
+  Quadro: ['data', 'pessoa', 'tracos', 'atualizado_em']
 };
 
 // Colunas guardadas como texto puro (evita a planilha transformar "2026-11-19" ou "1/2 xícara" em data).
@@ -41,7 +44,7 @@ var COLUNAS_TEXTO = {
   id: true, data: true, feita_em: true, criada_em: true, registrado_em: true, atualizada_em: true,
   atualizado_em: true, prazo: true, meta_id: true, foto_id: true, miniatura_id: true, pessoa: true,
   texto: true, recado: true, titulo: true, unidade: true, refeicao: true, alimento: true,
-  quantidade: true, obs: true, origem: true, pendencia: true, base64: true, hora: true, marcado_por: true
+  quantidade: true, obs: true, origem: true, pendencia: true, base64: true, hora: true, marcado_por: true, tracos: true
 };
 
 // Cache por execução (no Apps Script cada requisição começa do zero; no servidor local é zerado em doPost).
@@ -104,6 +107,7 @@ function despachar_(c) {
     estado: acaoEstado_,
     foto: acaoFoto_,
     memorias: acaoMemorias_,
+    quadro: acaoQuadro_,
     progresso: acaoProgresso_
   };
   var escrita = {
@@ -119,7 +123,8 @@ function despachar_(c) {
     marcarMetaSemana: acaoMarcarMetaSemana_,
     salvarMetaLongo: acaoSalvarMetaLongo_,
     salvarMomento: acaoSalvarMomento_,
-    marcarRemedio: acaoMarcarRemedio_
+    marcarRemedio: acaoMarcarRemedio_,
+    salvarQuadro: acaoSalvarQuadro_
   };
   var acao = String(c.acao || '');
   if (publicas.hasOwnProperty(acao)) return publicas[acao](c);
@@ -323,7 +328,8 @@ function montarEstado_(eu, opcoes) {
     dieta: dieta,
     dietaDias: dietaDias,
     peso: peso,
-    momentos: momentos,
+    momentos: momentos,          // foto + recado (usado até a versão 1.2; hoje só aparece nas Memórias)
+    quadro: lerQuadros_([hoje])[hoje] || porPessoa_([]),
     remedio: lerRemedio_()
   };
 }
@@ -655,6 +661,10 @@ function acaoMemorias_(c) {
     if (!m.pessoa || !m.data || m.data >= antesDe) return;
     (porData[m.data] = porData[m.data] || {})[m.pessoa] = m;
   });
+  var quadros = lerQuadros_();
+  Object.keys(quadros).forEach(function (d) {
+    if (d < antesDe && !porData[d]) porData[d] = {};
+  });
   var datas = Object.keys(porData).sort().reverse();
   var pagina = datas.slice(0, limite);
   var ids = [];
@@ -663,7 +673,7 @@ function acaoMemorias_(c) {
   });
   var minis = lerMiniaturas_(ids);
   var dias = pagina.map(function (d) {
-    var dia = { data: d };
+    var dia = { data: d, quadro: quadros[d] || null };
     PESSOAS.forEach(function (p) { dia[p] = porData[d][p] ? publicaMomento_(porData[d][p], minis) : null; });
     return dia;
   });
@@ -723,6 +733,79 @@ function lerMiniaturas_(ids) {
 }
 
 /* =========================================================================
+ * Quadro do dia (um quadro branco por dia, compartilhado; cada um desenha com a sua cor)
+ *
+ * Cada pessoa tem uma linha por dia na aba Quadro, com todos os seus traços em JSON:
+ *   [[espessura, x1, y1, x2, y2, ...], ...]
+ * As coordenadas vão de 0 a 1000 (proporção do quadro), então o desenho fica igual em qualquer tela.
+ * Como cada um só grava a própria linha, os dois podem desenhar ao mesmo tempo sem um apagar o outro.
+ * ========================================================================= */
+
+/** Traços de todos os dias de "datas" (ou de todos os dias, se "datas" for omitido): { dia: { ele: [...], ela: [...] } }. */
+function lerQuadros_(datas) {
+  var alvo = null;
+  if (datas) { alvo = {}; datas.forEach(function (d) { alvo[d] = true; }); }
+  var out = {};
+  ler_('Quadro').forEach(function (r) {
+    var d = dataStr_(r.data), p = pessoa_(r.pessoa);
+    if (!d || !p || (alvo && !alvo[d])) return;
+    var tracos = tracosDoTexto_(r.tracos);
+    if (!tracos.length) return;
+    if (!out[d]) out[d] = porPessoa_([]);
+    out[d][p] = tracos;
+  });
+  return out;
+}
+
+function tracosDoTexto_(v) {
+  try {
+    var t = JSON.parse(String(v || '[]'));
+    return Array.isArray(t) ? t : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+/** Leitura leve usada pelo site a cada poucos segundos enquanto o quadro está aberto. */
+function acaoQuadro_() {
+  var hoje = hoje_();
+  return { quadro: { data: hoje, tracos: lerQuadros_([hoje])[hoje] || porPessoa_([]) } };
+}
+
+/** Grava todos os traços de hoje de quem está desenhando (substitui a linha dela/dele). Lista vazia apaga. */
+function acaoSalvarQuadro_(c, eu) {
+  var hoje = hoje_();
+  if (c.data && dataStr_(c.data) !== hoje) throw erro_('O dia virou: o quadro de ontem já foi para as Memórias.', 'dia_virou');
+  var tracos = validarTracos_(c.tracos);
+  var texto = JSON.stringify(tracos);
+  if (texto.length > LIMITE_QUADRO_CHARS) throw erro_('O quadro de hoje ficou cheio. Desfaça alguns traços para continuar.', 'quadro_cheio');
+  var linha = ler_('Quadro').filter(function (r) { return dataStr_(r.data) === hoje && pessoa_(r.pessoa) === eu; })[0];
+  if (!tracos.length) {
+    if (linha) excluirLinha_('Quadro', linha._linha);
+  } else {
+    var campos = { data: hoje, pessoa: eu, tracos: texto, atualizado_em: agoraIso_() };
+    if (linha) atualizar_('Quadro', linha._linha, campos);
+    else acrescentar_('Quadro', campos);
+  }
+  return acaoQuadro_();
+}
+
+/** Confere o formato dos traços e devolve uma cópia limpa (só números inteiros dentro do quadro). */
+function validarTracos_(v) {
+  if (!Array.isArray(v)) throw erro_('Desenho inválido.');
+  if (v.length > MAX_TRACOS) throw erro_('O quadro de hoje ficou cheio. Desfaça alguns traços para continuar.', 'quadro_cheio');
+  return v.map(function (t) {
+    if (!Array.isArray(t) || t.length < 3 || t.length % 2 !== 1) throw erro_('Desenho inválido.');
+    return t.map(function (n, i) {
+      n = Math.round(Number(n));
+      if (!isFinite(n)) throw erro_('Desenho inválido.');
+      if (i === 0) return Math.min(Math.max(n, 1), 60);   // espessura
+      return Math.min(Math.max(n, 0), 1000);               // coordenada
+    });
+  });
+}
+
+/* =========================================================================
  * Progresso (sequências, gráficos)
  * ========================================================================= */
 
@@ -754,8 +837,13 @@ function acaoProgresso_() {
     });
   });
 
-  // Recados trocados (os dois postaram no mesmo dia)
+  // Dias em que os dois participaram: postaram o momento (até a versão 1.2) ou desenharam no quadro
   var postou = {};
+  var quadros = lerQuadros_();
+  Object.keys(quadros).forEach(function (d) {
+    if (d > hoje || d < limiteHist) return;
+    PESSOAS.forEach(function (p) { if (quadros[d][p].length) (postou[d] = postou[d] || {})[p] = true; });
+  });
   ler_('Momentos').forEach(function (r) {
     var m = momentoObj_(r);
     if (!m.pessoa || !m.data || m.data > hoje || m.data < limiteHist) return;

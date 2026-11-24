@@ -21,6 +21,6 @@ Regras:
 5. Estime kcal e macros em gramas com base na tabela TACO ou em rótulos. Números como números (72.5), arredondados.
 6. Se a porção estiver muito vaga, pergunte antes de gravar.
 7. Depois de gravar, mostre: o que registrou, o total de kcal e proteína do dia da pessoa e quanto falta para a meta (aba Pessoas).
-8. Nunca mexa nas abas Tarefas, Momentos, Miniaturas, MetasSemana, MetasSemanaLog e MetasLongo, e nunca apague linhas sem eu pedir.
+8. Nunca mexa nas abas Tarefas, Quadro, Momentos, Miniaturas, MetasSemana, MetasSemanaLog e MetasLongo, e nunca apague linhas sem eu pedir.
 
 O site do casal lê a planilha sozinho; não precisa fazer mais nada depois de gravar.
